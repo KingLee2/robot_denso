@@ -7,6 +7,7 @@ from pybricks.parameters import Port, Stop, Direction, Button, Color
 from pybricks.tools import wait, StopWatch, DataLog
 from pybricks.robotics import DriveBase
 from pybricks.media.ev3dev import SoundFile, ImageFile
+from math import atan, degrees
 
 # This program requires LEGO EV3 MicroPython v2.0 or higher.
 # Click "Open user guide" on the EV3 extension tab for more information.
@@ -16,28 +17,28 @@ from pybricks.media.ev3dev import SoundFile, ImageFile
 ev3 = EV3Brick()
 
 # Hai động cơ bánh xe
-left_motor = Motor(Port.C)
+left_motor = Motor(Port.A)
 right_motor = Motor(Port.B)
 
-clamp_motor = Motor(Port.A)
-arm_motor = Motor(Port.D)
+clamp_motor = Motor(Port.D)
+arm_motor = Motor(Port.C)
 
 # Cảm biến siêu âm 
 ultra_f = UltrasonicSensor(Port.S1)
-ultra_r = UltrasonicSensor(Port.S3)
+ultra_r = UltrasonicSensor(Port.S2)
 # gyro
 gyro_sensor = GyroSensor(Port.S4)
 #color
-color_sensor = ColorSensor(Port.S2)
+color_sensor = ColorSensor(Port.S3)
 #driver
-robot_driver = DriveBase(left_motor, right_motor, 56, 175)
+robot_driver = DriveBase(left_motor, right_motor, 56, 185)
 #var
 step = 0
 complete = 0
 complete_step_0 = 0
 
 count_red = 0
-DISTANCE_F = 180
+DISTANCE_F = 70 #70
 DISTANCE_R = 300
 DISTANCE_BALL = 250
 ###
@@ -53,17 +54,56 @@ ROTATION_ANGLE_MOVE_ARM = REVOLUTION_MOVE_ARM * 360
 KP = 2.0
 KI = 0.01
 KD = 0.8
-
+KP_DIST = 0.8
 integral = 0
 last_error = 0
 
 # --- Hàm hỗ trợ ---
 def init_robot():
-    robot_driver.settings(300,800, 60, 120)
+    robot_driver.settings(150,300, 60, 120)
     gyro_sensor.reset_angle(0)
     clamp_motor.reset_angle(0)
     arm_motor.reset_angle(0)
     init_pick_ball()
+
+def align_with_wall(move_dist=100):
+    """
+    Xoay nhẹ qua lại để căn robot song song với tường bên phải.
+    Dựa trên biến thiên của cảm biến ultrasonic.
+    """
+    ev3.screen.clear()
+    ev3.screen.print("Aligning...")
+    d1 = ultra_r.distance()
+    ev3.screen.print(d1)
+    robot_driver.reset()
+    robot_driver.drive(100, 0)
+    while robot_driver.distance() < move_dist:
+        wait(10)
+    robot_driver.stop()
+    wait(100)
+    d2 = ultra_r.distance()
+    ev3.screen.print(d2)
+    delta_d = d2 - d1
+    theta = degrees(atan(delta_d / move_dist))  # độ lệch
+    ev3.screen.print("Angle:", theta)
+    robot_driver.drive(-100, 0)
+    while robot_driver.distance() > 0:
+        wait(10)
+    robot_driver.stop()
+    wait(100)
+    gyro_sensor.reset_angle(0)
+    target = theta  
+    if target > 2:
+        while gyro_sensor.angle() < target:
+            robot_driver.drive(0, 20)
+            wait(10)
+    elif target < -2:
+        while gyro_sensor.angle() > target:
+            robot_driver.drive(0, -20)
+            wait(10)
+    robot_driver.stop()
+    ev3.screen.print("Aligned to wall")
+    gyro_sensor.reset_angle(0)
 
 def run_forward(speed, k=2):
     # error = gyro_sensor.angle()
@@ -118,7 +158,7 @@ def rotate_left(angle, omega): #truyen vao tham so am
     while abs(gyro_sensor.angle() - angle) > 2:
     # while gyro_sensor.angle() - angle > -2:
         robot_driver.drive(0,omega)
-        # ev3.screen.print(gyro_sensor.angle())
+        ev3.screen.print(gyro_sensor.angle())
         wait(10)
     robot_driver.stop()
 
@@ -127,7 +167,7 @@ def rotate_right(angle, omega): #truyen vao tham so duong
     while abs(gyro_sensor.angle() - angle) > 2:
     # while gyro_sensor.angle() - angle < 2:
         robot_driver.drive(0,omega)
-        # ev3.screen.print(gyro_sensor.angle())
+        ev3.screen.print(gyro_sensor.angle())
         wait(10)
     robot_driver.stop()
     
@@ -165,9 +205,9 @@ def correct_to_zero(base_omega):
         error_angle = gyro_sensor.angle()
         # Quyết định hướng quay
         if error_angle > 0:
-            robot_driver.drive(0, -base_omega)
-        else:
             robot_driver.drive(0, base_omega)
+        else:
+            robot_driver.drive(0, -base_omega)
         wait(10)
     robot_driver.stop()
 
@@ -175,35 +215,45 @@ def move_after_wall():
     global distanse_move
     global ultra_r
     robot_driver.stop()
+    # robot_driver.straight(50)
+    # robot_driver.stop()
     distanse_move = robot_driver.distance()
     ev3.screen.print("dis: ",distanse_move)
     if(distanse_move >1200):
-        robot_driver.straight(DISTANCE_F - 15) #25
-        wait(10)
-        # robot_driver.straight(-(DISTANCE_F - 30 + 450))
-        robot_driver.straight(-(DISTANCE_F - 10)) #40
-        rotate_right(180,45)
-        robot_driver.straight(460)
+        # robot_driver.straight(DISTANCE_F - 15) #25
+        # wait(10)
+        # # robot_driver.straight(-(DISTANCE_F - 30 + 450))
+        # robot_driver.straight(-(DISTANCE_F - 10)) #40
+        # rotate_right(180,45)
+        # robot_driver.turn(90)
+        # wait(10)
+        # robot_driver.turn(90)
+        # wait(10)
+        robot_driver.straight(-500)
         robot_driver.stop()
         if (ultra_r.distance() < DISTANCE_R):
-            rotate_left(-90,-45)
+            # rotate_left(-90,-45)
+            robot_driver.turn(-90)
         else:
-            rotate_right(90,45)
+            # rotate_right(90,45)
+            robot_driver.turn(90)
     else:
-        robot_driver.straight(DISTANCE_F - 15) #25
-        wait(10)
-        robot_driver.straight(-(DISTANCE_F - 30)) #40
+        # robot_driver.straight(DISTANCE_F - 15) #25
+        # wait(10)
+        # robot_driver.straight(-(DISTANCE_F - 30)) #40
         if (ultra_r.distance() < DISTANCE_R):
-            rotate_left(-90,-45)
+            # rotate_left(-90,-45)
+            robot_driver.turn(-90)
         else:
-            rotate_right(90,45)
+            # rotate_right(90,45)
+            robot_driver.turn(90)
 
-def scan_for_ball(angle=15, omega=15, detect_distance=250):
+def scan_for_ball(angle=15, omega=15, detect_distance=200):
     gyro_sensor.reset_angle(0)
     found = False
 
     # --- Quay trái ---
-    while gyro_sensor.angle() > -angle:
+    while gyro_sensor.angle() < angle:
         robot_driver.drive(0, -omega)  # quay trái
         # ev3.screen.print("angle: ", gyro_sensor.angle())
         if ultra_f.distance() < detect_distance:
@@ -216,7 +266,7 @@ def scan_for_ball(angle=15, omega=15, detect_distance=250):
 
     # Nếu chưa thấy → quét sang phải
     if not found:
-        while gyro_sensor.angle() < angle:
+        while gyro_sensor.angle() > -angle:
             robot_driver.drive(0, omega)  # quay phải
             # ev3.screen.print("angle: ", gyro_sensor.angle())
             if ultra_f.distance() < detect_distance:
@@ -230,7 +280,7 @@ def scan_for_ball(angle=15, omega=15, detect_distance=250):
         # Quay về góc 0
         while abs(gyro_sensor.angle()) > 1:
             error = gyro_sensor.angle()
-            robot_driver.drive(0, -2 * error)  # nhẹ nhàng quay về giữa
+            robot_driver.drive(0, 2 * error)  # nhẹ nhàng quay về giữa
             # ev3.screen.print("angle: ", gyro_sensor.angle())
             wait(10)
         robot_driver.stop()
@@ -312,8 +362,10 @@ ev3.speaker.beep()
 ev3.screen.clear()
 ev3.screen.print("robot run")
 wait(1000)
-#####TEST ANGLE
-# rotate_circle(90, 300)
+###
+# while(True):
+#     print("Angle: ", gyro_sensor.angle())
+#     wait(500)
 ###### CHECK COLOR SENSOR
 # while (True):
 #     run_forward(150)
@@ -358,8 +410,8 @@ while (True):
         robot_driver.reset()
         gyro_sensor.reset_angle(0)
         while ultra_f.distance() > DISTANCE_F:
-            run_forward(150)
-            # robot_driver.drive(150,0)
+            # run_forward(150)
+            robot_driver.drive(150,0)
             ev3.screen.print(robot_driver.distance())
             # check ball
             # ev3.screen.print(gyro_sensor.angle())
@@ -369,7 +421,7 @@ while (True):
                 robot_driver.stop()
                 if scan_for_ball():
                     # ev3.screen.print("angle: ", gyro_sensor.angle())
-                    robot_driver.straight(170)
+                    robot_driver.straight(100)
                     pick_ball()
                     # complete_step_0 = complete_step_0 + 1
                 else:
@@ -380,24 +432,33 @@ while (True):
                 ev3.screen.print("YELLOW")
                 robot_driver.stop()
                 robot_driver.straight(60)
-                if (ultra_r.distance() < DISTANCE_R):
-                    rotate_left(-90,-45)
-                else:
-                    rotate_right(90,45)
-                gyro_sensor.reset_angle(0)
-                robot_driver.reset()
+                break
+                # if (ultra_r.distance() < DISTANCE_R):
+                #     rotate_left(-90,-45)
+                # else:
+                #     rotate_right(90,45)
+                # gyro_sensor.reset_angle(0)
+                # robot_driver.reset()
             elif(detected_color == Color.RED):
                 ev3.screen.print("RED")
                 robot_driver.stop()
-                robot_driver.straight(-300)
+                # robot_driver.straight(-300)
+                # robot_driver.stop()
+                # rotate_right(180,45)
+                robot_driver.turn(-180)
+                while(True):
+                    robot_driver.drive(-150,0)
+                    detected_color = check_color(color_sensor)
+                    if(detected_color == Color.GREEN):
+                        break
+                # robot_driver.straight(-315)
                 robot_driver.stop()
-                rotate_right(180,45)
-                robot_driver.straight(-315)
+                wait(1000)
+                robot_driver.straight(350)
                 robot_driver.stop()
-                wait(3000)
-                robot_driver.straight(230)
-                rotate_right(90,45)
-                rotate_circle(90, 300)
+                robot_driver.turn(90)
+                # rotate_right(90,45)
+                # rotate_circle(90, 300)
                 # if (ultra_r.distance() < DISTANCE_R):
                 #     rotate_left(-90,-45)
                 # else:
@@ -407,16 +468,17 @@ while (True):
 
         # correct_to_zero(15)
         if(complete_step_0 == 1):
+            # move_after_wall()
             step = 1
         else:
-            # correct_to_zero(15)
+            correct_to_zero(15)
             move_after_wall()
     else:
         robot_driver.reset()
         gyro_sensor.reset_angle(0)
         while ultra_f.distance() > DISTANCE_F:
-            run_forward(150)
-            # robot_driver.drive(150,0)
+            # run_forward(150)
+            robot_driver.drive(150,0)
             ev3.screen.print(robot_driver.distance())
             detected_color = check_color(color_sensor)        
             if(detected_color == Color.RED):
@@ -425,22 +487,23 @@ while (True):
                 complete = 1
                 break
             elif(detected_color == Color.GREEN):
-                ev3.screen.print("YELLOW")
+                ev3.screen.print("GREEN")
                 robot_driver.stop()
                 robot_driver.straight(200)
-                rotate_right(90,45)
+                # rotate_right(90,45)
                 # if (ultra_r.distance() < DISTANCE_R):
                 #     rotate_left(-90,-45)
                 # else:
                 #     rotate_right(90,45)
-                gyro_sensor.reset_angle(0)
-                robot_driver.reset()
+                # gyro_sensor.reset_angle(0)
+                # robot_driver.reset()
+                break
 
         # correct_to_zero(15)
         if(complete == 1):
             break
         else:
-            # correct_to_zero(15)
+            correct_to_zero(15)
             move_after_wall()
 ####
 ev3.screen.print("COMPLETE TASK")
